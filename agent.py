@@ -22,7 +22,7 @@ client = OpenAI(
 )
 
 # 3. Initialisation de Composio (Outils)
-from composio_core import Composio
+from composio import Composio
 composio = Composio(api_key=os.getenv("COMPOSIO_API_KEY"))
 gmail_tool = composio.get_tool("GMAIL")
 calendar_tool = composio.get_tool("GOOGLECALENDAR")
