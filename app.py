@@ -2,23 +2,40 @@ import os
 import uuid
 
 from dotenv import load_dotenv
+
 from flask import (
     Flask,
     jsonify,
     redirect,
     render_template,
     request,
+    session,
 )
 
 from agent import process_message
+
 from composio_service import (
     authorize_toolkit,
     list_connected_accounts,
 )
 
+from database import (
+    create_user,
+    get_messages,
+    init_db,
+)
+
+
+# ---------------------------------------------------------
+# ENVIRONMENT
+# ---------------------------------------------------------
 
 load_dotenv()
 
+
+# ---------------------------------------------------------
+# FLASK
+# ---------------------------------------------------------
 
 app = Flask(
     __name__,
@@ -26,21 +43,56 @@ app = Flask(
     static_folder="static",
 )
 
-app.secret_key = os.getenv("FLASK_SECRET_KEY")
+
+app.secret_key = os.getenv(
+    "FLASK_SECRET_KEY"
+)
+
 
 if not app.secret_key:
-    raise RuntimeError("FLASK_SECRET_KEY is missing")
+
+    raise RuntimeError(
+        "FLASK_SECRET_KEY is missing"
+    )
 
 
 # ---------------------------------------------------------
-# DEMO USER
+# DATABASE
 # ---------------------------------------------------------
-#
-# IMPORTANT:
-# For production, replace this with the authenticated
-# user's real database ID.
-#
-DEMO_USER_ID = "luce_demo_user"
+
+init_db()
+
+
+# ---------------------------------------------------------
+# USER
+# ---------------------------------------------------------
+
+def get_user_id():
+    """
+    Return the persistent Luce user ID.
+
+    This is a prototype identity system.
+
+    In production, replace this with the authenticated
+    user's real database ID.
+    """
+
+    if "user_id" not in session:
+
+        user_id = (
+            "luce_"
+            + uuid.uuid4().hex
+        )
+
+        session.permanent = True
+
+        session["user_id"] = user_id
+
+        create_user(
+            user_id
+        )
+
+    return session["user_id"]
 
 
 # ---------------------------------------------------------
@@ -49,7 +101,12 @@ DEMO_USER_ID = "luce_demo_user"
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+
+    get_user_id()
+
+    return render_template(
+        "index.html"
+    )
 
 
 # ---------------------------------------------------------
@@ -58,29 +115,44 @@ def index():
 
 @app.get("/health")
 def health():
-    return jsonify({
-        "status": "ok",
-        "service": "luce",
-    })
+
+    return jsonify(
+        {
+            "status": "ok",
+            "service": "luce",
+        }
+    )
 
 
 # ---------------------------------------------------------
-# COMPOSIO CONNECTION
+# CONNECTION
 # ---------------------------------------------------------
 
-@app.post("/api/connect/<toolkit>")
-def connect_toolkit(toolkit):
+@app.post(
+    "/api/connect/<toolkit>"
+)
+def connect_toolkit(
+    toolkit,
+):
 
-    allowed = {
+    allowed_toolkits = {
         "gmail",
         "googlecalendar",
         "googledrive",
     }
 
-    if toolkit not in allowed:
-        return jsonify({
-            "error": "Unsupported toolkit"
-        }), 400
+    if toolkit not in allowed_toolkits:
+
+        return jsonify(
+            {
+                "error":
+                    "Unsupported toolkit"
+            }
+        ), 400
+
+
+    user_id = get_user_id()
+
 
     try:
 
@@ -89,13 +161,18 @@ def connect_toolkit(toolkit):
             + "/api/composio/callback"
         )
 
+
         connection = authorize_toolkit(
-            user_id=DEMO_USER_ID,
+            user_id=user_id,
             toolkit=toolkit,
             callback_url=callback_url,
         )
 
-        return jsonify(connection)
+
+        return jsonify(
+            connection
+        )
+
 
     except Exception as exc:
 
@@ -103,22 +180,25 @@ def connect_toolkit(toolkit):
             "Composio authorization failed"
         )
 
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify(
+            {
+                "error": str(exc)
+            }
+        ), 500
 
 
 # ---------------------------------------------------------
 # COMPOSIO CALLBACK
 # ---------------------------------------------------------
 
-@app.get("/api/composio/callback")
+@app.get(
+    "/api/composio/callback"
+)
 def composio_callback():
 
-    # Composio handles the actual connection.
+    # Composio completes the connection flow.
     #
-    # The callback is mainly used to return the user
-    # to Luce after authentication.
+    # We simply return the user to Luce.
 
     return redirect("/")
 
@@ -127,14 +207,22 @@ def composio_callback():
 # CONNECTION STATUS
 # ---------------------------------------------------------
 
-@app.get("/api/connections")
+@app.get(
+    "/api/connections"
+)
 def connections():
+
+    user_id = get_user_id()
+
 
     try:
 
-        accounts = list_connected_accounts(
-            DEMO_USER_ID
+        accounts = (
+            list_connected_accounts(
+                user_id
+            )
         )
+
 
         result = {
             "gmail": False,
@@ -142,27 +230,37 @@ def connections():
             "googledrive": False,
         }
 
+
         for account in accounts:
 
-            status = str(
-                getattr(account, "status", "")
-            ).upper()
-
-            if status != "ACTIVE":
-                continue
-
             toolkit = getattr(
-                getattr(account, "toolkit", None),
+                getattr(
+                    account,
+                    "toolkit",
+                    None,
+                ),
                 "slug",
                 "",
             )
 
-            toolkit = str(toolkit).lower()
+
+            toolkit = (
+                str(toolkit)
+                .lower()
+            )
+
 
             if toolkit in result:
-                result[toolkit] = True
 
-        return jsonify(result)
+                result[
+                    toolkit
+                ] = True
+
+
+        return jsonify(
+            result
+        )
+
 
     except Exception as exc:
 
@@ -170,37 +268,88 @@ def connections():
             "Could not retrieve connections"
         )
 
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify(
+            {
+                "error": str(exc)
+            }
+        ), 500
+
+
+# ---------------------------------------------------------
+# CHAT HISTORY
+# ---------------------------------------------------------
+
+@app.get(
+    "/api/history"
+)
+def history():
+
+    user_id = get_user_id()
+
+
+    messages = get_messages(
+        user_id
+    )
+
+
+    return jsonify(
+        {
+            "messages": messages
+        }
+    )
 
 
 # ---------------------------------------------------------
 # CHAT
 # ---------------------------------------------------------
 
-@app.post("/api/chat")
+@app.post(
+    "/api/chat"
+)
 def chat():
 
-    data = request.get_json(silent=True) or {}
+    user_id = get_user_id()
+
+
+    data = (
+        request
+        .get_json(
+            silent=True
+        )
+        or {}
+    )
+
 
     message = str(
-        data.get("message", "")
+        data.get(
+            "message",
+            "",
+        )
     ).strip()
 
+
     if not message:
-        return jsonify({
-            "error": "Message is required"
-        }), 400
+
+        return jsonify(
+            {
+                "error":
+                    "Message is required"
+            }
+        ), 400
+
 
     try:
 
         result = process_message(
-            user_id=DEMO_USER_ID,
+            user_id=user_id,
             message=message,
         )
 
-        return jsonify(result)
+
+        return jsonify(
+            result
+        )
+
 
     except Exception as exc:
 
@@ -208,9 +357,30 @@ def chat():
             "Luce processing failed"
         )
 
-        return jsonify({
-            "error": str(exc)
-        }), 500
+
+        return jsonify(
+            {
+                "error": str(exc)
+            }
+        ), 500
+
+
+# ---------------------------------------------------------
+# LOGOUT / RESET LOCAL SESSION
+# ---------------------------------------------------------
+
+@app.post(
+    "/api/logout"
+)
+def logout():
+
+    session.clear()
+
+    return jsonify(
+        {
+            "success": True
+        }
+    )
 
 
 # ---------------------------------------------------------
@@ -220,8 +390,12 @@ def chat():
 if __name__ == "__main__":
 
     port = int(
-        os.getenv("PORT", "10000")
+        os.getenv(
+            "PORT",
+            "10000",
+        )
     )
+
 
     app.run(
         host="0.0.0.0",
