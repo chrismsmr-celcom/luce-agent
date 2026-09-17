@@ -1,207 +1,616 @@
+
 import os
-import json
-from typing import List, Dict, Any
-from openai import OpenAI
+from typing import List, Dict, Any, Tuple
+
 from dotenv import load_dotenv
+from openai import OpenAI
+
 from agentguard import AgentGuard, SecurityException
 
+# ==============================================================================
+# ENVIRONNEMENT
+# ==============================================================================
+
 load_dotenv()
+
 
 # ==============================================================================
 # 1. INITIALISATION DE CERBERE
 # ==============================================================================
+
 guard = AgentGuard(
-    collector_url=os.getenv("AGENTGUARD_COLLECTOR_URL", "https://app.cerbereag.site"),
+    collector_url=os.getenv(
+        "AGENTGUARD_COLLECTOR_URL",
+        "https://app.cerbereag.site",
+    ),
     api_key=os.getenv("AGENTGUARD_API_KEY"),
     max_budget=10.0,
-    block_on_high=True
+    block_on_high=True,
 )
+
 
 # ==============================================================================
 # 2. INITIALISATION DE DEEPSEEK
 # ==============================================================================
+
+deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+
+if not deepseek_api_key:
+    raise RuntimeError(
+        "DEEPSEEK_API_KEY manquante dans les variables d'environnement."
+    )
+
 client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com"
+    api_key=deepseek_api_key,
+    base_url="https://api.deepseek.com",
 )
 
+
 # ==============================================================================
-# 3. INITIALISATION DE COMPOSIO (Pattern officiel avec sécurité Render)
+# 3. INITIALISATION DE COMPOSIO
 # ==============================================================================
+
+composio_client = None
 composio_session = None
 composio_error = None
 
 try:
     from composio import Composio
-    
-    api_key = os.getenv("COMPOSIO_API_KEY")
-    user_id = os.getenv("COMPOSIO_USER_ID", "luce_default_user")
-    
-    if api_key:
-        composio_client = Composio(api_key=api_key)
-        
-        # CRUCIAL : wait_for_connections=False pour éviter le blocage sur Render
-        composio_session = composio_client.create(
-            user_id=user_id,
-            toolkits=[
-                "gmail",
-                "googledrive",
-                "googlecalendar",
-            ],
-            manage_connections={
-                "wait_for_connections": False, 
-            },
+
+    composio_api_key = os.getenv("COMPOSIO_API_KEY")
+    composio_user_id = os.getenv(
+        "COMPOSIO_USER_ID",
+        "luce_default_user",
+    )
+
+    if not composio_api_key:
+        raise RuntimeError(
+            "COMPOSIO_API_KEY manquante dans les variables d'environnement."
         )
-        print("✅ Session Composio initialisée avec succès.")
-    else:
-        composio_error = "COMPOSIO_API_KEY manquante dans les variables d'environnement."
-        
+
+    # --------------------------------------------------------------------------
+    # Création du client Composio
+    # --------------------------------------------------------------------------
+
+    composio_client = Composio(
+        api_key=composio_api_key,
+    )
+
+    # --------------------------------------------------------------------------
+    # IMPORTANT :
+    #
+    # L'ancienne version du code utilisait :
+    #
+    #     composio_client.create(...)
+    #
+    # Cette méthode n'existe pas dans le SDK actuel.
+    #
+    # On utilise :
+    #
+    #     composio_client.sessions.create(...)
+    # --------------------------------------------------------------------------
+
+    composio_session = composio_client.sessions.create(
+        user_id=composio_user_id,
+        toolkits=[
+            "gmail",
+            "googledrive",
+            "googlecalendar",
+        ],
+        manage_connections={
+            "enable": True,
+            "wait_for_connections": False,
+        },
+    )
+
+    print("✅ Composio initialisé avec succès.")
+    print(f"   User ID : {composio_user_id}")
+
 except Exception as e:
-    composio_error = f"Erreur Composio (clé invalide, révoquée ou HTTP 410) : {str(e)}"
-    print(f"⚠️ COMPOSIO WARNING: {composio_error}")
+    composio_error = (
+        f"{type(e).__name__}: {str(e)}"
+    )
+
+    print(
+        "⚠️ COMPOSIO WARNING: "
+        f"{composio_error}"
+    )
+
 
 # ==============================================================================
-# 4. OUTILS MÉTIER (Avec fallback gracieux)
+# 4. OUTILS MÉTIER
 # ==============================================================================
 
 @guard.guard_tool_call
-def read_emails(query: str = "inbox", max_results: int = 10) -> Dict[str, Any]:
-    """Lit les emails récents via Gmail."""
+def read_emails(
+    query: str = "inbox",
+    max_results: int = 10,
+) -> Dict[str, Any]:
+    """
+    Lit les emails récents via Gmail.
+    """
+
     if composio_session is None:
-        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
+        return {
+            "status": "error",
+            "message": (
+                "Composio indisponible : "
+                f"{composio_error}"
+            ),
+        }
+
     try:
         response = composio_session.execute_action(
             app="gmail",
             action="GMAIL_FETCH_EMAILS",
-            params={"query": query, "maxResults": max_results}
+            params={
+                "query": query,
+                "maxResults": max_results,
+            },
         )
-        return {"status": "success", "emails": response}
+
+        return {
+            "status": "success",
+            "emails": response,
+        }
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "error",
+            "message": f"{type(e).__name__}: {str(e)}",
+        }
+
+
+# ------------------------------------------------------------------------------
 
 @guard.guard_tool_call
-def send_email(to: str, subject: str, body: str) -> Dict[str, Any]:
-    """Envoie un email via Gmail."""
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+) -> Dict[str, Any]:
+    """
+    Envoie un email via Gmail.
+    """
+
     if composio_session is None:
-        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
+        return {
+            "status": "error",
+            "message": (
+                "Composio indisponible : "
+                f"{composio_error}"
+            ),
+        }
+
     try:
         response = composio_session.execute_action(
             app="gmail",
             action="GMAIL_SEND_EMAIL",
-            params={"to": to, "subject": subject, "body": body}
+            params={
+                "to": to,
+                "subject": subject,
+                "body": body,
+            },
         )
-        return {"status": "sent", "message_id": response.get("id", "mock_id")}
+
+        message_id = "unknown"
+
+        if isinstance(response, dict):
+            message_id = response.get(
+                "id",
+                response.get(
+                    "messageId",
+                    "unknown",
+                ),
+            )
+
+        return {
+            "status": "sent",
+            "message_id": message_id,
+        }
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "error",
+            "message": f"{type(e).__name__}: {str(e)}",
+        }
+
+
+# ------------------------------------------------------------------------------
 
 @guard.guard_tool_call
-def check_calendar(date: str = "today") -> Dict[str, Any]:
-    """Vérifie le calendrier."""
+def check_calendar(
+    date: str = "today",
+) -> Dict[str, Any]:
+    """
+    Vérifie le calendrier.
+    """
+
     if composio_session is None:
-        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
+        return {
+            "status": "error",
+            "message": (
+                "Composio indisponible : "
+                f"{composio_error}"
+            ),
+        }
+
     try:
         response = composio_session.execute_action(
             app="googlecalendar",
             action="GOOGLECALENDAR_GET_EVENTS",
-            params={"date": date}
+            params={
+                "date": date,
+            },
         )
-        return {"status": "success", "events": response}
+
+        return {
+            "status": "success",
+            "events": response,
+        }
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "error",
+            "message": f"{type(e).__name__}: {str(e)}",
+        }
+
+
+# ------------------------------------------------------------------------------
 
 @guard.guard_tool_call
-def list_drive_files(query: str = "") -> Dict[str, Any]:
-    """Liste les fichiers Drive."""
+def list_drive_files(
+    query: str = "",
+) -> Dict[str, Any]:
+    """
+    Liste les fichiers Google Drive.
+    """
+
     if composio_session is None:
-        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
+        return {
+            "status": "error",
+            "message": (
+                "Composio indisponible : "
+                f"{composio_error}"
+            ),
+        }
+
     try:
         response = composio_session.execute_action(
             app="googledrive",
             action="GOOGLEDRIVE_LIST_FILES",
-            params={"query": query}
+            params={
+                "query": query,
+            },
         )
-        return {"status": "success", "files": response}
+
+        return {
+            "status": "success",
+            "files": response,
+        }
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "error",
+            "message": f"{type(e).__name__}: {str(e)}",
+        }
+
 
 # ==============================================================================
 # 5. SYSTEM PROMPT DE LUCE
 # ==============================================================================
-LUCE_SYSTEM_PROMPT = """Tu es Luce, une assistante virtuelle professionnelle spécialisée dans la gestion administrative.
+
+LUCE_SYSTEM_PROMPT = """
+Tu es Luce, une assistante virtuelle professionnelle spécialisée
+dans la gestion administrative.
 
 Tes responsabilités :
-- Gérer les emails : lire, résumer, répondre
-- Gérer le calendrier : vérifier disponibilités
-- Gérer les documents : lister fichiers sur Drive
-- Fournir des résumés et analyses
 
-Style : Professionnel, efficace, proactif. Tu vas droit au but.
+- Gérer les emails : lire, résumer et répondre
+- Gérer le calendrier : vérifier les événements et disponibilités
+- Gérer les documents : rechercher et lister les fichiers Drive
+- Fournir des résumés et analyses
+- Aider l'utilisateur dans ses tâches administratives
+
+Style :
+
+- Professionnel
+- Clair
+- Concis
+- Efficace
+- Direct
+
 Tu es une assistante métier, pas un outil de sécurité.
+
+La sécurité est gérée séparément par Cerbere.
+Tu ne dois jamais prétendre qu'une action a été exécutée
+si l'outil correspondant a retourné une erreur.
 """
 
+
 # ==============================================================================
-# 6. CERVEAU DE LUCE
+# 6. CERVEAU DE LUCE — DEEPSEEK
 # ==============================================================================
 
 @guard.guard_llm_call
-def call_deepseek(messages: List[Dict[str, str]]) -> Any:
-    """Appelle DeepSeek."""
+def call_deepseek(
+    messages: List[Dict[str, str]],
+) -> Any:
+    """
+    Appelle DeepSeek à travers Cerbere.
+    """
+
     response = client.chat.completions.create(
         model="deepseek-chat",
         messages=messages,
         temperature=0.3,
-        max_tokens=1000
+        max_tokens=1000,
     )
+
     return response
 
-def luce_process_message(user_input: str, chat_history: List[Dict[str, str]]) -> tuple[str, str]:
-    """Traite un message utilisateur."""
-    messages = [{"role": "system", "content": LUCE_SYSTEM_PROMPT}]
-    messages.extend(chat_history)
-    messages.append({"role": "user", "content": user_input})
-    
+
+# ==============================================================================
+# 7. TRAITEMENT D'UN MESSAGE
+# ==============================================================================
+
+def luce_process_message(
+    user_input: str,
+    chat_history: List[Dict[str, str]],
+) -> Tuple[str, str]:
+    """
+    Traite un message utilisateur.
+
+    Retourne :
+
+        (réponse, statut)
+
+    Statuts possibles :
+
+        ALLOWED
+        BLOCKED
+        ERROR
+    """
+
+    messages = [
+        {
+            "role": "system",
+            "content": LUCE_SYSTEM_PROMPT,
+        }
+    ]
+
+    # --------------------------------------------------------------------------
+    # Historique
+    # --------------------------------------------------------------------------
+
+    if chat_history:
+        messages.extend(chat_history)
+
+    # --------------------------------------------------------------------------
+    # Message utilisateur
+    # --------------------------------------------------------------------------
+
+    messages.append(
+        {
+            "role": "user",
+            "content": user_input,
+        }
+    )
+
     try:
-        response = call_deepseek(messages=messages)
-        assistant_reply = response.choices[0].message.content
-        
-        user_lower = user_input.lower()
-        
-        if any(word in user_lower for word in ["envoyer", "envoie", "send", "transférer"]):
-            tool_result = send_email(
-                to="recipient@example.com", 
-                subject="Message de Luce",
-                body=assistant_reply[:500]
+
+        # ======================================================================
+        # LLM
+        # ======================================================================
+
+        response = call_deepseek(
+            messages=messages,
+        )
+
+        assistant_reply = (
+            response.choices[0]
+            .message
+            .content
+        )
+
+        if not assistant_reply:
+            assistant_reply = (
+                "Je n'ai pas reçu de réponse exploitable du modèle."
             )
+
+        # ======================================================================
+        # DÉTECTION SIMPLE DE L'INTENTION
+        # ======================================================================
+
+        user_lower = user_input.lower()
+
+        # ----------------------------------------------------------------------
+        # EMAIL — ENVOI
+        # ----------------------------------------------------------------------
+
+        if any(
+            word in user_lower
+            for word in [
+                "envoyer",
+                "envoie",
+                "send",
+                "transférer",
+            ]
+        ):
+
+            tool_result = send_email(
+                to="recipient@example.com",
+                subject="Message de Luce",
+                body=assistant_reply[:500],
+            )
+
             if tool_result["status"] == "sent":
-                assistant_reply += f"\n\n✅ Email envoyé avec succès."
+
+                assistant_reply += (
+                    "\n\nEmail envoyé avec succès."
+                )
+
             else:
-                assistant_reply += f"\n\n❌ Erreur : {tool_result['message']}"
-        
-        elif any(word in user_lower for word in ["email", "résumer", "inbox"]):
-            tool_result = read_emails(query="inbox", max_results=5)
+
+                assistant_reply += (
+                    "\n\nImpossible d'envoyer l'email : "
+                    f"{tool_result['message']}"
+                )
+
+        # ----------------------------------------------------------------------
+        # EMAIL — LECTURE
+        # ----------------------------------------------------------------------
+
+        elif any(
+            word in user_lower
+            for word in [
+                "email",
+                "e-mail",
+                "mail",
+                "inbox",
+                "boîte de réception",
+            ]
+        ):
+
+            tool_result = read_emails(
+                query="inbox",
+                max_results=5,
+            )
+
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📧 J'ai récupéré tes emails récents."
+
+                assistant_reply += (
+                    "\n\nLes emails récents ont été récupérés."
+                )
+
             else:
-                assistant_reply += f"\n\n⚠️ Impossible de lire les emails : {tool_result['message']}"
-        
-        elif any(word in user_lower for word in ["calendrier", "rendez-vous", "agenda"]):
-            tool_result = check_calendar(date="today")
+
+                assistant_reply += (
+                    "\n\nImpossible de lire les emails : "
+                    f"{tool_result['message']}"
+                )
+
+        # ----------------------------------------------------------------------
+        # CALENDRIER
+        # ----------------------------------------------------------------------
+
+        elif any(
+            word in user_lower
+            for word in [
+                "calendrier",
+                "rendez-vous",
+                "rendez vous",
+                "agenda",
+                "calendar",
+            ]
+        ):
+
+            tool_result = check_calendar(
+                date="today",
+            )
+
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📅 J'ai vérifié ton calendrier."
+
+                assistant_reply += (
+                    "\n\nLe calendrier a été vérifié."
+                )
+
             else:
-                assistant_reply += f"\n\n⚠️ Impossible d'accéder au calendrier : {tool_result['message']}"
-        
-        elif any(word in user_lower for word in ["fichier", "document", "drive"]):
+
+                assistant_reply += (
+                    "\n\nImpossible d'accéder au calendrier : "
+                    f"{tool_result['message']}"
+                )
+
+        # ----------------------------------------------------------------------
+        # GOOGLE DRIVE
+        # ----------------------------------------------------------------------
+
+        elif any(
+            word in user_lower
+            for word in [
+                "fichier",
+                "fichiers",
+                "document",
+                "documents",
+                "drive",
+            ]
+        ):
+
             tool_result = list_drive_files()
+
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📁 J'ai listé tes fichiers Drive."
+
+                assistant_reply += (
+                    "\n\nLes fichiers Drive ont été récupérés."
+                )
+
             else:
-                assistant_reply += f"\n\n⚠️ Impossible d'accéder à Drive : {tool_result['message']}"
-        
+
+                assistant_reply += (
+                    "\n\nImpossible d'accéder à Drive : "
+                    f"{tool_result['message']}"
+                )
+
+        # ======================================================================
+        # FIN
+        # ======================================================================
+
         return assistant_reply, "ALLOWED"
-    
+
+    # ==========================================================================
+    # CERBERE BLOQUE L'ACTION
+    # ==========================================================================
+
     except SecurityException as e:
-        return f"🛡️ Action bloquée par le système de sécurité : {str(e)}", "BLOCKED"
-    
+
+        return (
+            "Action bloquée par Cerbere : "
+            f"{str(e)}",
+            "BLOCKED",
+        )
+
+    # ==========================================================================
+    # ERREUR GÉNÉRALE
+    # ==========================================================================
+
     except Exception as e:
-        return f"❌ Erreur système : {str(e)}", "ERROR"
+
+        return (
+            "Erreur système : "
+            f"{type(e).__name__}: {str(e)}",
+            "ERROR",
+        )
+
+
+# ==============================================================================
+# 8. TEST LOCAL OPTIONNEL
+# ==============================================================================
+
+if __name__ == "__main__":
+
+    print("\n========================================")
+    print("        LUCE + CERBERE")
+    print("========================================")
+
+    print(
+        "Composio :",
+        "READY" if composio_session else "UNAVAILABLE",
+    )
+
+    if composio_error:
+        print(
+            "Composio error:",
+            composio_error,
+        )
+
+    print("========================================\n")
+
+    response, status = luce_process_message(
+        user_input="Bonjour Luce",
+        chat_history=[],
+    )
+
+    print("STATUS:", status)
+    print("RESPONSE:", response)
+
