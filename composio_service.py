@@ -9,16 +9,13 @@ from database import (
     save_composio_session_id,
 )
 
-
 load_dotenv()
 
 
 COMPOSIO_API_KEY = os.getenv("COMPOSIO_API_KEY")
 
 if not COMPOSIO_API_KEY:
-    raise RuntimeError(
-        "COMPOSIO_API_KEY is missing"
-    )
+    raise RuntimeError("COMPOSIO_API_KEY is missing")
 
 
 composio = Composio(
@@ -26,102 +23,80 @@ composio = Composio(
 )
 
 
-# ---------------------------------------------------------
-# SESSION
-# ---------------------------------------------------------
-
 def get_or_create_session(user_id: str):
     """
-    Return the persistent Composio session for a Luce user.
-
-    The session ID is stored in our database.
-
-    If the user already has a session:
-        composio.use(session_id)
-
-    Otherwise:
-        composio.sessions.create(...)
+    Get the existing Composio session for the user.
+    Create one if it does not exist.
     """
 
     if not user_id:
-        raise ValueError(
-            "user_id is required"
-        )
+        raise ValueError("user_id is required")
 
-    # -----------------------------------------------------
-    # Try to restore an existing session
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # 1. Try to restore an existing session
+    # ---------------------------------------------------------
 
-    session_id = get_composio_session_id(
-        user_id
-    )
+    session_id = get_composio_session_id(user_id)
 
     if session_id:
-
         try:
+            session = composio.use(session_id)
 
-            session = composio.use(
-                session_id
+            print(
+                f"[Composio] Restored session "
+                f"{session_id} for user {user_id}"
             )
 
             return session
 
         except Exception as exc:
-
             print(
-                "Could not restore Composio session:",
-                exc,
+                f"[Composio] Could not restore session "
+                f"{session_id}: {exc}"
             )
 
-    # -----------------------------------------------------
-    # Create a new persistent session
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # 2. Create a new session
+    # ---------------------------------------------------------
 
-    session = composio.sessions.create(
+    session = composio.create(
         user_id=user_id,
-
         toolkits=[
             "gmail",
             "googlecalendar",
             "googledrive",
         ],
-
         sandbox={
-            "enable": False
+            "enable": False,
         },
     )
 
-    # -----------------------------------------------------
-    # Persist session ID
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # 3. Persist the session ID
+    # ---------------------------------------------------------
 
     save_composio_session_id(
         user_id=user_id,
         session_id=session.session_id,
     )
 
+    print(
+        f"[Composio] Created session "
+        f"{session.session_id} for user {user_id}"
+    )
+
     return session
 
 
-# ---------------------------------------------------------
-# TOOLS
-# ---------------------------------------------------------
-
 def get_tools(user_id: str):
     """
-    Return tools available to this user's session.
+    Return tools exposed by the user's Composio session.
     """
 
-    session = get_or_create_session(
-        user_id
-    )
+    session = get_or_create_session(user_id)
 
     return session.tools()
 
-
-# ---------------------------------------------------------
-# AUTHORIZATION
-# ---------------------------------------------------------
 
 def authorize_toolkit(
     user_id: str,
@@ -129,17 +104,13 @@ def authorize_toolkit(
     callback_url: str | None = None,
 ):
     """
-    Start Composio OAuth authorization.
-
-    The user is redirected to the Composio Connect Link.
+    Start OAuth authorization for a toolkit.
     """
 
-    session = get_or_create_session(
-        user_id
-    )
+    session = get_or_create_session(user_id)
 
     connection_request = session.authorize(
-        toolkit=toolkit,
+        toolkit,
         callback_url=callback_url,
     )
 
@@ -149,16 +120,9 @@ def authorize_toolkit(
             "id",
             None,
         ),
-
-        "redirect_url": (
-            connection_request.redirect_url
-        ),
+        "redirect_url": connection_request.redirect_url,
     }
 
-
-# ---------------------------------------------------------
-# EXECUTE TOOL
-# ---------------------------------------------------------
 
 def execute_tool(
     user_id: str,
@@ -166,13 +130,10 @@ def execute_tool(
     arguments: dict[str, Any],
 ):
     """
-    Execute a Composio tool inside the user's
-    persistent session.
+    Execute a Composio tool inside the user's session.
     """
 
-    session = get_or_create_session(
-        user_id
-    )
+    session = get_or_create_session(user_id)
 
     return session.execute(
         tool_slug,
@@ -180,15 +141,10 @@ def execute_tool(
     )
 
 
-# ---------------------------------------------------------
-# CONNECTED ACCOUNTS
-# ---------------------------------------------------------
-
-def list_connected_accounts(
-    user_id: str,
-):
+def list_connected_accounts(user_id: str):
     """
-    Return all connected accounts for a user.
+    Return active Composio connected accounts
+    for this user.
     """
 
     response = composio.connected_accounts.list(
@@ -196,8 +152,6 @@ def list_connected_accounts(
         statuses=["ACTIVE"],
     )
 
-    # Current Composio SDK returns a response
-    # containing .items.
     return getattr(
         response,
         "items",
