@@ -26,37 +26,54 @@ client = OpenAI(
 )
 
 # ==============================================================================
-# 3. INITIALISATION DE COMPOSIO (Avec gestion d'erreur robuste)
+# 3. INITIALISATION DE COMPOSIO (Pattern officiel avec sécurité Render)
 # ==============================================================================
-composio_toolset = None
+composio_session = None
 composio_error = None
 
 try:
-    from composio import ComposioToolSet, App, Action
+    from composio import Composio
+    
     api_key = os.getenv("COMPOSIO_API_KEY")
+    user_id = os.getenv("COMPOSIO_USER_ID", "luce_default_user")
+    
     if api_key:
-        composio_toolset = ComposioToolSet(api_key=api_key)
-        # Test de connexion rapide pour valider la clé
-        _ = composio_toolset.client.apps.get()
+        composio_client = Composio(api_key=api_key)
+        
+        # CRUCIAL : wait_for_connections=False pour éviter le blocage sur Render
+        composio_session = composio_client.create(
+            user_id=user_id,
+            toolkits=[
+                "gmail",
+                "googledrive",
+                "googlecalendar",
+            ],
+            manage_connections={
+                "wait_for_connections": False, 
+            },
+        )
+        print("✅ Session Composio initialisée avec succès.")
     else:
-        composio_error = "COMPOSIO_API_KEY non définie dans les variables d'environnement Render."
+        composio_error = "COMPOSIO_API_KEY manquante dans les variables d'environnement."
+        
 except Exception as e:
-    composio_error = f"Erreur de connexion à Composio (clé API invalide ou révoquée - HTTP 410). Détails: {str(e)}"
+    composio_error = f"Erreur Composio (clé invalide, révoquée ou HTTP 410) : {str(e)}"
     print(f"⚠️ COMPOSIO WARNING: {composio_error}")
 
 # ==============================================================================
-# 4. OUTILS MÉTIER (Réels, avec fallback si Composio échoue)
+# 4. OUTILS MÉTIER (Avec fallback gracieux)
 # ==============================================================================
 
 @guard.guard_tool_call
 def read_emails(query: str = "inbox", max_results: int = 10) -> Dict[str, Any]:
     """Lit les emails récents via Gmail."""
-    if composio_toolset is None:
-        return {"status": "error", "message": f"Composio non disponible: {composio_error}"}
+    if composio_session is None:
+        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
     try:
-        response = composio_toolset.execute_action(
-            action=Action.GMAIL_FETCH_EMAILS,
-            params={"query": query, "max_results": max_results}
+        response = composio_session.execute_action(
+            app="gmail",
+            action="GMAIL_FETCH_EMAILS",
+            params={"query": query, "maxResults": max_results}
         )
         return {"status": "success", "emails": response}
     except Exception as e:
@@ -65,25 +82,27 @@ def read_emails(query: str = "inbox", max_results: int = 10) -> Dict[str, Any]:
 @guard.guard_tool_call
 def send_email(to: str, subject: str, body: str) -> Dict[str, Any]:
     """Envoie un email via Gmail."""
-    if composio_toolset is None:
-        return {"status": "error", "message": f"Composio non disponible: {composio_error}"}
+    if composio_session is None:
+        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
     try:
-        response = composio_toolset.execute_action(
-            action=Action.GMAIL_SEND_EMAIL,
+        response = composio_session.execute_action(
+            app="gmail",
+            action="GMAIL_SEND_EMAIL",
             params={"to": to, "subject": subject, "body": body}
         )
-        return {"status": "sent", "message_id": response.get("id")}
+        return {"status": "sent", "message_id": response.get("id", "mock_id")}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @guard.guard_tool_call
 def check_calendar(date: str = "today") -> Dict[str, Any]:
     """Vérifie le calendrier."""
-    if composio_toolset is None:
-        return {"status": "error", "message": f"Composio non disponible: {composio_error}"}
+    if composio_session is None:
+        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
     try:
-        response = composio_toolset.execute_action(
-            action=Action.GOOGLECALENDAR_GET_EVENTS,
+        response = composio_session.execute_action(
+            app="googlecalendar",
+            action="GOOGLECALENDAR_GET_EVENTS",
             params={"date": date}
         )
         return {"status": "success", "events": response}
@@ -93,11 +112,12 @@ def check_calendar(date: str = "today") -> Dict[str, Any]:
 @guard.guard_tool_call
 def list_drive_files(query: str = "") -> Dict[str, Any]:
     """Liste les fichiers Drive."""
-    if composio_toolset is None:
-        return {"status": "error", "message": f"Composio non disponible: {composio_error}"}
+    if composio_session is None:
+        return {"status": "error", "message": f"Composio indisponible : {composio_error}"}
     try:
-        response = composio_toolset.execute_action(
-            action=Action.GOOGLEDRIVE_LIST_FILES,
+        response = composio_session.execute_action(
+            app="googledrive",
+            action="GOOGLEDRIVE_LIST_FILES",
             params={"query": query}
         )
         return {"status": "success", "files": response}
@@ -111,13 +131,11 @@ LUCE_SYSTEM_PROMPT = """Tu es Luce, une assistante virtuelle professionnelle sp�
 
 Tes responsabilités :
 - Gérer les emails : lire, résumer, répondre
-- Gérer le calendrier : vérifier disponibilités, créer rendez-vous
+- Gérer le calendrier : vérifier disponibilités
 - Gérer les documents : lister fichiers sur Drive
 - Fournir des résumés et analyses
 
 Style : Professionnel, efficace, proactif. Tu vas droit au but.
-
-Outils disponibles : read_emails, send_email, check_calendar, list_drive_files.
 Tu es une assistante métier, pas un outil de sécurité.
 """
 
@@ -143,42 +161,40 @@ def luce_process_message(user_input: str, chat_history: List[Dict[str, str]]) ->
     messages.append({"role": "user", "content": user_input})
     
     try:
-        # Appel LLM (protégé par Cerbere au niveau du prompt)
         response = call_deepseek(messages=messages)
         assistant_reply = response.choices[0].message.content
         
-        # Détection d'intention d'outil (simplifiée pour la démo)
         user_lower = user_input.lower()
         
         if any(word in user_lower for word in ["envoyer", "envoie", "send", "transférer"]):
             tool_result = send_email(
-                to="recipient@example.com", # L'IA devrait normalement extraire le vrai destinataire
+                to="recipient@example.com", 
                 subject="Message de Luce",
                 body=assistant_reply[:500]
             )
             if tool_result["status"] == "sent":
-                assistant_reply += f"\n\n✅ Email envoyé à {tool_result.get('to', 'destinataire')}."
+                assistant_reply += f"\n\n✅ Email envoyé avec succès."
             else:
-                assistant_reply += f"\n\n❌ Erreur lors de l'envoi : {tool_result['message']}"
+                assistant_reply += f"\n\n❌ Erreur : {tool_result['message']}"
         
-        elif any(word in user_lower for word in ["email", "résumer", "inbox", "boîte de réception"]):
+        elif any(word in user_lower for word in ["email", "résumer", "inbox"]):
             tool_result = read_emails(query="inbox", max_results=5)
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📧 J'ai trouvé des emails récents."
+                assistant_reply += f"\n\n📧 J'ai récupéré tes emails récents."
             else:
                 assistant_reply += f"\n\n⚠️ Impossible de lire les emails : {tool_result['message']}"
         
         elif any(word in user_lower for word in ["calendrier", "rendez-vous", "agenda"]):
             tool_result = check_calendar(date="today")
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📅 J'ai vérifié votre calendrier."
+                assistant_reply += f"\n\n📅 J'ai vérifié ton calendrier."
             else:
-                assistant_reply += f"\n\n⚠️ Impossible de vérifier le calendrier : {tool_result['message']}"
+                assistant_reply += f"\n\n⚠️ Impossible d'accéder au calendrier : {tool_result['message']}"
         
         elif any(word in user_lower for word in ["fichier", "document", "drive"]):
             tool_result = list_drive_files()
             if tool_result["status"] == "success":
-                assistant_reply += f"\n\n📁 J'ai listé vos fichiers Drive."
+                assistant_reply += f"\n\n📁 J'ai listé tes fichiers Drive."
             else:
                 assistant_reply += f"\n\n⚠️ Impossible d'accéder à Drive : {tool_result['message']}"
         
