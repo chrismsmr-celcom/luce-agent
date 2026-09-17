@@ -1,26 +1,39 @@
-const modal = document.getElementById("google-modal");
+const navItems = document.querySelectorAll(".nav-item");
+const views = document.querySelectorAll(".view");
 
 
-function connectGoogle() {
+// ---------------------------------------------------------
+// NAVIGATION
+// ---------------------------------------------------------
 
-    modal.classList.remove("hidden");
+navItems.forEach((button) => {
 
-}
+    button.addEventListener("click", () => {
+
+        const target = button.dataset.view;
+
+        navItems.forEach((item) => {
+            item.classList.remove("active");
+        });
+
+        button.classList.add("active");
+
+        views.forEach((view) => {
+            view.classList.remove("active");
+        });
+
+        document
+            .getElementById(`${target}-view`)
+            .classList.add("active");
+
+    });
+
+});
 
 
-function closeGoogleModal() {
-
-    modal.classList.add("hidden");
-
-}
-
-
-function continueGoogleAuth() {
-
-    window.location.href = "/auth/google";
-
-}
-
+// ---------------------------------------------------------
+// CONNECTIONS
+// ---------------------------------------------------------
 
 async function loadConnections() {
 
@@ -32,26 +45,44 @@ async function loadConnections() {
 
         const data = await response.json();
 
+        document
+            .querySelectorAll(".connection-card")
+            .forEach((card) => {
 
-        updateStatus(
-            "gmail-status",
-            data.gmail
-        );
+                const toolkit =
+                    card.dataset.toolkit;
 
-        updateStatus(
-            "calendar-status",
-            data.calendar
-        );
+                const connected =
+                    data[toolkit] === true;
 
-        updateStatus(
-            "drive-status",
-            data.drive
-        );
+                const status =
+                    card.querySelector(".status");
+
+                const button =
+                    card.querySelector(".connect-button");
+
+                if (connected) {
+
+                    status.textContent =
+                        "Connected";
+
+                    status.classList.add(
+                        "connected"
+                    );
+
+                    button.textContent =
+                        "Connected";
+
+                    button.disabled = true;
+
+                }
+
+            });
 
     } catch (error) {
 
         console.error(
-            "Erreur chargement connexions:",
+            "Connection status error:",
             error
         );
 
@@ -60,45 +91,204 @@ async function loadConnections() {
 }
 
 
-function updateStatus(elementId, connected) {
+document
+    .querySelectorAll(".connect-button")
+    .forEach((button) => {
 
-    const element =
-        document.getElementById(elementId);
+        button.addEventListener(
+            "click",
+            async () => {
 
-    if (!element) {
-        return;
-    }
+                const card =
+                    button.closest(
+                        ".connection-card"
+                    );
 
+                const toolkit =
+                    card.dataset.toolkit;
 
-    if (connected) {
+                button.disabled = true;
 
-        element.textContent =
-            "Connecté";
+                button.textContent =
+                    "Connecting...";
 
-        element.classList.remove(
-            "disconnected"
+                try {
+
+                    const response =
+                        await fetch(
+                            `/api/connect/${toolkit}`,
+                            {
+                                method: "POST",
+                            }
+                        );
+
+                    const data =
+                        await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(
+                            data.error ||
+                            "Connection failed"
+                        );
+                    }
+
+                    if (data.redirect_url) {
+
+                        window.location.href =
+                            data.redirect_url;
+
+                    }
+
+                } catch (error) {
+
+                    console.error(error);
+
+                    button.disabled = false;
+
+                    button.textContent =
+                        "Connect";
+
+                    alert(
+                        "Connection failed: " +
+                        error.message
+                    );
+
+                }
+
+            }
         );
 
-        element.classList.add(
-            "connected"
+    });
+
+
+// ---------------------------------------------------------
+// CHAT
+// ---------------------------------------------------------
+
+const chatForm =
+    document.getElementById(
+        "chat-form"
+    );
+
+const input =
+    document.getElementById(
+        "message-input"
+    );
+
+const messages =
+    document.getElementById(
+        "messages"
+    );
+
+
+function addMessage(
+    content,
+    type
+) {
+
+    const wrapper =
+        document.createElement(
+            "div"
         );
 
-    } else {
+    wrapper.className =
+        `message ${type}`;
 
-        element.textContent =
-            "Non connecté";
-
-        element.classList.remove(
-            "connected"
+    const bubble =
+        document.createElement(
+            "div"
         );
 
-        element.classList.add(
-            "disconnected"
-        );
+    bubble.className =
+        "bubble";
 
-    }
+    bubble.textContent =
+        content;
 
+    wrapper.appendChild(
+        bubble
+    );
+
+    messages.appendChild(
+        wrapper
+    );
+
+    messages.scrollTop =
+        messages.scrollHeight;
 }
 
+
+chatForm.addEventListener(
+    "submit",
+    async (event) => {
+
+        event.preventDefault();
+
+        const message =
+            input.value.trim();
+
+        if (!message) {
+            return;
+        }
+
+        addMessage(
+            message,
+            "user"
+        );
+
+        input.value = "";
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/chat",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
+
+                        body: JSON.stringify({
+                            message,
+                        }),
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error ||
+                    "Request failed"
+                );
+            }
+
+            addMessage(
+                data.message ||
+                "No response.",
+                "assistant"
+            );
+
+        } catch (error) {
+
+            addMessage(
+                "Error: " +
+                error.message,
+                "assistant"
+            );
+
+        }
+
+    }
+);
+
+
+// ---------------------------------------------------------
+// INITIALIZATION
+// ---------------------------------------------------------
 
 loadConnections();
