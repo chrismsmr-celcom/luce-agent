@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Luce — Assistant IA</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body>
+
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="logo">
+            <div class="logo-icon">C</div>
+            <span>Luce</span>
+        </div>
+
+        <nav>
+
+            <button class="nav-item active">
+                Chat
+            </button>
+
+            <button class="nav-item">
+                Inbox
+            </button>
+
+            <button class="nav-item">
+                Connexions
+            </button>
+
+        </nav>
+
+    </aside>
+
+
+    <main class="main">
+
+        <header class="header">
+
+            <div>
+
+                <h1>Connexions</h1>
+
+                <p>
+                    Connectez les services utilisés par Luce.
+                </p>
+
+            </div>
+
+        </header>
+
+
+        <section class="connections">
+
+            <!-- GMAIL -->
+
+            <div class="connection-card">
+
+                <div class="service-icon gmail">
+                    G
+                </div>
+
+                <div class="service-info">
+
+                    <h2>Gmail</h2>
+
+                    <p>
+                        Lire et gérer vos emails.
+                    </p>
+
+                    <span
+                        id="gmail-status"
+                        class="status disconnected"
+                    >
+                        Non connecté
+                    </span>
+
+                </div>
+
+                <button
+                    class="connect-button"
+                    onclick="connectGoogle()"
+                >
+                    Connecter
+                </button>
+
+            </div>
+
+
+            <!-- CALENDAR -->
+
+            <div class="connection-card">
+
+                <div class="service-icon calendar">
+                    31
+                </div>
+
+                <div class="service-info">
+
+                    <h2>Google Calendar</h2>
+
+                    <p>
+                        Consulter votre agenda.
+                    </p>
+
+                    <span
+                        id="calendar-status"
+                        class="status disconnected"
+                    >
+                        Non connecté
+                    </span>
+
+                </div>
+
+                <button
+                    class="connect-button"
+                    onclick="connectGoogle()"
+                >
+                    Connecter
+                </button>
+
+            </div>
+
+
+            <!-- DRIVE -->
+
+            <div class="connection-card">
+
+                <div class="service-icon drive">
+                    D
+                </div>
+
+                <div class="service-info">
+
+                    <h2>Google Drive</h2>
+
+                    <p>
+                        Accéder à vos documents.
+                    </p>
+
+                    <span
+                        id="drive-status"
+                        class="status disconnected"
+                    >
+                        Non connecté
+                    </span>
+
+                </div>
+
+                <button
+                    class="connect-button"
+                    onclick="connectGoogle()"
+                >
+                    Connecter
+                </button>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- GOOGLE MODAL -->
+
+<div
+    id="google-modal"
+    class="modal hidden"
+>
+
+    <div class="modal-overlay"></div>
+
+    <div class="modal-content">
+
+        <button
+            class="modal-close"
+            onclick="closeGoogleModal()"
+        >
+            ×
+        </button>
+
+        <div class="google-logo">
+            G
+        </div>
+
+        <h2>
+            Connecter Google
+        </h2>
+
+        <p>
+            Luce pourra accéder aux services
+            Google que vous avez autorisés.
+        </p>
+
+        <div class="permissions">
+
+            <div>
+                ✓ Gmail
+            </div>
+
+            <div>
+                ✓ Google Calendar
+            </div>
+
+            <div>
+                ✓ Google Drive
+            </div>
+
+        </div>
+
+        <button
+            class="google-button"
+            onclick="continueGoogleAuth()"
+        >
+
+            <span>
+                G
+            </span>
+
+            Continuer avec Google
+
+        </button>
+
+        <small>
+            Vous serez redirigé vers Google pour
+            vous authentifier et donner votre consentement.
+        </small>
+
+    </div>
+
+</div>
+
+
+<script src="/static/app.js"></script>
+
+</body>
+
+</html>
