@@ -280,23 +280,109 @@ def execute_with_cerbere(
     arguments: dict,
 ):
     """
-    Security boundary between DeepSeek and Composio.
+    Real Cerbere execution boundary.
 
-    DeepSeek NEVER directly executes an external tool.
-
-    Flow:
-
-        DeepSeek
-           ↓
-        Cerbere
-           ↓
-        Composio
+    DeepSeek
+        ↓
+    Cerbere.guard_tool_call()
+        ↓
+    ALLOW / BLOCK
+        ↓
+    Composio
     """
 
     print(
         f"[Cerbere] Checking tool call: "
         f"{tool_name} {arguments}"
     )
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    # AgentGuard.guard_tool_call() expects a callable.
+    #
+    # Cerbere executes the callable only AFTER its policy
+    # and runtime checks have passed.
+    # --------------------------------------------------------
+
+    def protected_execution(**kwargs):
+        print(
+            f"[Composio] Executing approved tool: "
+            f"{tool_name}"
+        )
+
+        return execute_tool(
+            user_id=user_id,
+            tool_slug=tool_name,
+            arguments=kwargs,
+        )
+
+    try:
+        result = guard.guard_tool_call(
+            tool_name=tool_name,
+            params=arguments,
+            func=protected_execution,
+        )
+
+        print(
+            f"[Cerbere] ALLOW: {tool_name}"
+        )
+
+        return {
+            "success": True,
+            "blocked": False,
+            "tool": tool_name,
+            "result": result,
+        }
+
+    except Exception as exc:
+
+        error_message = str(exc)
+
+        # ----------------------------------------------------
+        # AgentGuard raises SecurityException when a tool
+        # is blocked.
+        # ----------------------------------------------------
+
+        if (
+            "AgentGuard" in error_message
+            or "blocked" in error_message.lower()
+            or "deny" in error_message.lower()
+            or "risk" in error_message.lower()
+            or "approval" in error_message.lower()
+        ):
+
+            print(
+                f"[Cerbere] BLOCK: "
+                f"{tool_name} -> {error_message}"
+            )
+
+            return {
+                "success": False,
+                "blocked": True,
+                "tool": tool_name,
+                "error": error_message,
+            }
+
+        # ----------------------------------------------------
+        # Other errors are NOT silently converted to ALLOW.
+        # Fail closed.
+        # ----------------------------------------------------
+
+        print(
+            f"[Cerbere] SECURITY ERROR: "
+            f"{tool_name} -> {error_message}"
+        )
+
+        return {
+            "success": False,
+            "blocked": True,
+            "tool": tool_name,
+            "error": (
+                "Cerbere security check failed. "
+                "Tool execution was prevented."
+            ),
+            "details": error_message,
+        }
 
     # --------------------------------------------------------
     # Try the existing Cerbere guard.
