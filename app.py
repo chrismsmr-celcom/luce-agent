@@ -1,154 +1,230 @@
 import os
+import uuid
 
+from dotenv import load_dotenv
 from flask import (
     Flask,
     jsonify,
     redirect,
     render_template,
-    session
+    request,
 )
 
-from google_auth import (
-    start_google_auth,
-    finish_google_auth,
-    get_credentials,
-    disconnect_google
-)
-
-from google_tools import (
-    read_emails,
-    check_calendar,
-    list_drive_files
+from agent import process_message
+from composio_service import (
+    authorize_toolkit,
+    list_connected_accounts,
 )
 
 
-app = Flask(__name__)
+load_dotenv()
 
-app.secret_key = os.getenv(
-    "FLASK_SECRET_KEY",
-    "CHANGE_THIS_SECRET_IN_PRODUCTION"
+
+app = Flask(
+    __name__,
+    template_folder="templates",
+    static_folder="static",
 )
 
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
+
+if not app.secret_key:
+    raise RuntimeError("FLASK_SECRET_KEY is missing")
 
 
-# ============================================================
+# ---------------------------------------------------------
+# DEMO USER
+# ---------------------------------------------------------
+#
+# IMPORTANT:
+# For production, replace this with the authenticated
+# user's real database ID.
+#
+DEMO_USER_ID = "luce_demo_user"
+
+
+# ---------------------------------------------------------
 # FRONTEND
-# ============================================================
+# ---------------------------------------------------------
 
-@app.route("/")
+@app.get("/")
 def index():
-
     return render_template("index.html")
 
 
-# ============================================================
-# GOOGLE OAUTH
-# ============================================================
+# ---------------------------------------------------------
+# HEALTH
+# ---------------------------------------------------------
 
-@app.route("/auth/google")
-def google_login():
+@app.get("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "luce",
+    })
 
-    authorization_url = start_google_auth()
 
-    return redirect(authorization_url)
+# ---------------------------------------------------------
+# COMPOSIO CONNECTION
+# ---------------------------------------------------------
 
+@app.post("/api/connect/<toolkit>")
+def connect_toolkit(toolkit):
 
-@app.route("/auth/google/callback")
-def google_callback():
+    allowed = {
+        "gmail",
+        "googlecalendar",
+        "googledrive",
+    }
+
+    if toolkit not in allowed:
+        return jsonify({
+            "error": "Unsupported toolkit"
+        }), 400
 
     try:
 
-        finish_google_auth()
-
-        return redirect("/?google=connected")
-
-    except Exception as e:
-
-        return redirect(
-            "/?google=error"
+        callback_url = (
+            request.host_url.rstrip("/")
+            + "/api/composio/callback"
         )
 
+        connection = authorize_toolkit(
+            user_id=DEMO_USER_ID,
+            toolkit=toolkit,
+            callback_url=callback_url,
+        )
 
-@app.route("/auth/google/disconnect")
-def google_disconnect():
+        return jsonify(connection)
 
-    disconnect_google()
+    except Exception as exc:
 
-    return redirect("/?google=disconnected")
+        app.logger.exception(
+            "Composio authorization failed"
+        )
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
 
 
-@app.route("/api/connections")
+# ---------------------------------------------------------
+# COMPOSIO CALLBACK
+# ---------------------------------------------------------
+
+@app.get("/api/composio/callback")
+def composio_callback():
+
+    # Composio handles the actual connection.
+    #
+    # The callback is mainly used to return the user
+    # to Luce after authentication.
+
+    return redirect("/")
+
+
+# ---------------------------------------------------------
+# CONNECTION STATUS
+# ---------------------------------------------------------
+
+@app.get("/api/connections")
 def connections():
 
-    connected = bool(get_credentials())
+    try:
 
-    return jsonify({
-        "google": connected,
-        "gmail": connected,
-        "calendar": connected,
-        "drive": connected
-    })
+        accounts = list_connected_accounts(
+            DEMO_USER_ID
+        )
 
+        result = {
+            "gmail": False,
+            "googlecalendar": False,
+            "googledrive": False,
+        }
 
-# ============================================================
-# GMAIL
-# ============================================================
+        for account in accounts:
 
-@app.route("/api/gmail/emails")
-def gmail_emails():
+            status = str(
+                getattr(account, "status", "")
+            ).upper()
 
-    result = read_emails(
-        query="in:inbox",
-        max_results=10
-    )
+            if status != "ACTIVE":
+                continue
 
-    return jsonify(result)
+            toolkit = getattr(
+                getattr(account, "toolkit", None),
+                "slug",
+                "",
+            )
 
+            toolkit = str(toolkit).lower()
 
-# ============================================================
-# CALENDAR
-# ============================================================
+            if toolkit in result:
+                result[toolkit] = True
 
-@app.route("/api/calendar/events")
-def calendar_events():
+        return jsonify(result)
 
-    result = check_calendar()
+    except Exception as exc:
 
-    return jsonify(result)
+        app.logger.exception(
+            "Could not retrieve connections"
+        )
 
-
-# ============================================================
-# DRIVE
-# ============================================================
-
-@app.route("/api/drive/files")
-def drive_files():
-
-    result = list_drive_files()
-
-    return jsonify(result)
+        return jsonify({
+            "error": str(exc)
+        }), 500
 
 
-# ============================================================
-# HEALTH
-# ============================================================
+# ---------------------------------------------------------
+# CHAT
+# ---------------------------------------------------------
 
-@app.route("/health")
-def health():
+@app.post("/api/chat")
+def chat():
 
-    return jsonify({
-        "status": "ok"
-    })
+    data = request.get_json(silent=True) or {}
 
+    message = str(
+        data.get("message", "")
+    ).strip()
+
+    if not message:
+        return jsonify({
+            "error": "Message is required"
+        }), 400
+
+    try:
+
+        result = process_message(
+            user_id=DEMO_USER_ID,
+            message=message,
+        )
+
+        return jsonify(result)
+
+    except Exception as exc:
+
+        app.logger.exception(
+            "Luce processing failed"
+        )
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ---------------------------------------------------------
+# START
+# ---------------------------------------------------------
 
 if __name__ == "__main__":
 
-    port = int(os.getenv("PORT", 5000))
+    port = int(
+        os.getenv("PORT", "10000")
+    )
 
     app.run(
         host="0.0.0.0",
         port=port,
-        debug=False
+        debug=False,
     )
