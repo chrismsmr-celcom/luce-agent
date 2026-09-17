@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
 
     <meta
@@ -10,13 +9,12 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Luce — Assistant IA</title>
+    <title>Luce — AI Chief of Staff</title>
 
     <link
         rel="stylesheet"
-        href="/static/style.css"
+        href="{{ url_for('static', filename='style.css') }}"
     >
-
 </head>
 
 <body>
@@ -26,22 +24,23 @@
     <aside class="sidebar">
 
         <div class="logo">
-            <div class="logo-icon">C</div>
-            <span>Luce</span>
+            LUCE
         </div>
 
         <nav>
 
-            <button class="nav-item active">
+            <button
+                class="nav-item active"
+                data-view="chat"
+            >
                 Chat
             </button>
 
-            <button class="nav-item">
-                Inbox
-            </button>
-
-            <button class="nav-item">
-                Connexions
+            <button
+                class="nav-item"
+                data-view="connections"
+            >
+                Connections
             </button>
 
         </nav>
@@ -51,124 +50,180 @@
 
     <main class="main">
 
-        <header class="header">
+        <!-- CHAT -->
 
-            <div>
+        <section
+            id="chat-view"
+            class="view active"
+        >
 
-                <h1>Connexions</h1>
+            <header class="header">
+
+                <div>
+                    <h1>Luce</h1>
+
+                    <p>
+                        Your AI Chief of Staff
+                    </p>
+                </div>
+
+            </header>
+
+
+            <div
+                id="messages"
+                class="messages"
+            >
+
+                <div class="message assistant">
+
+                    <div class="bubble">
+
+                        Hello. I'm Luce.
+
+                        <br><br>
+
+                        I can work with your connected
+                        business tools.
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <form
+                id="chat-form"
+                class="chat-form"
+            >
+
+                <input
+                    id="message-input"
+                    type="text"
+                    placeholder="Ask Luce something..."
+                    autocomplete="off"
+                >
+
+                <button type="submit">
+                    Send
+                </button>
+
+            </form>
+
+        </section>
+
+
+        <!-- CONNECTIONS -->
+
+        <section
+            id="connections-view"
+            class="view"
+        >
+
+            <header class="header">
+
+                <h1>Connections</h1>
 
                 <p>
-                    Connectez les services utilisés par Luce.
+                    Connect Luce to your tools.
                 </p>
 
-            </div>
-
-        </header>
+            </header>
 
 
-        <section class="connections">
+            <div class="connections-grid">
 
-            <!-- GMAIL -->
 
-            <div class="connection-card">
-
-                <div class="service-icon gmail">
-                    G
-                </div>
-
-                <div class="service-info">
-
-                    <h2>Gmail</h2>
-
-                    <p>
-                        Lire et gérer vos emails.
-                    </p>
-
-                    <span
-                        id="gmail-status"
-                        class="status disconnected"
-                    >
-                        Non connecté
-                    </span>
-
-                </div>
-
-                <button
-                    class="connect-button"
-                    onclick="connectGoogle()"
+                <div
+                    class="connection-card"
+                    data-toolkit="gmail"
                 >
-                    Connecter
-                </button>
 
-            </div>
+                    <div class="connection-icon">
+                        G
+                    </div>
 
+                    <div class="connection-info">
 
-            <!-- CALENDAR -->
+                        <h3>Gmail</h3>
 
-            <div class="connection-card">
+                        <p>
+                            Read and manage emails.
+                        </p>
 
-                <div class="service-icon calendar">
-                    31
-                </div>
+                        <span class="status">
+                            Not connected
+                        </span>
 
-                <div class="service-info">
+                    </div>
 
-                    <h2>Google Calendar</h2>
-
-                    <p>
-                        Consulter votre agenda.
-                    </p>
-
-                    <span
-                        id="calendar-status"
-                        class="status disconnected"
-                    >
-                        Non connecté
-                    </span>
+                    <button class="connect-button">
+                        Connect
+                    </button>
 
                 </div>
 
-                <button
-                    class="connect-button"
-                    onclick="connectGoogle()"
+
+                <div
+                    class="connection-card"
+                    data-toolkit="googlecalendar"
                 >
-                    Connecter
-                </button>
 
-            </div>
+                    <div class="connection-icon">
+                        C
+                    </div>
 
+                    <div class="connection-info">
 
-            <!-- DRIVE -->
+                        <h3>Google Calendar</h3>
 
-            <div class="connection-card">
+                        <p>
+                            Manage your calendar.
+                        </p>
 
-                <div class="service-icon drive">
-                    D
-                </div>
+                        <span class="status">
+                            Not connected
+                        </span>
 
-                <div class="service-info">
+                    </div>
 
-                    <h2>Google Drive</h2>
-
-                    <p>
-                        Accéder à vos documents.
-                    </p>
-
-                    <span
-                        id="drive-status"
-                        class="status disconnected"
-                    >
-                        Non connecté
-                    </span>
+                    <button class="connect-button">
+                        Connect
+                    </button>
 
                 </div>
 
-                <button
-                    class="connect-button"
-                    onclick="connectGoogle()"
+
+                <div
+                    class="connection-card"
+                    data-toolkit="googledrive"
                 >
-                    Connecter
-                </button>
+
+                    <div class="connection-icon">
+                        D
+                    </div>
+
+                    <div class="connection-info">
+
+                        <h3>Google Drive</h3>
+
+                        <p>
+                            Access your documents.
+                        </p>
+
+                        <span class="status">
+                            Not connected
+                        </span>
+
+                    </div>
+
+                    <button class="connect-button">
+                        Connect
+                    </button>
+
+                </div>
+
 
             </div>
 
@@ -179,78 +234,9 @@
 </div>
 
 
-<!-- GOOGLE MODAL -->
-
-<div
-    id="google-modal"
-    class="modal hidden"
->
-
-    <div class="modal-overlay"></div>
-
-    <div class="modal-content">
-
-        <button
-            class="modal-close"
-            onclick="closeGoogleModal()"
-        >
-            ×
-        </button>
-
-        <div class="google-logo">
-            G
-        </div>
-
-        <h2>
-            Connecter Google
-        </h2>
-
-        <p>
-            Luce pourra accéder aux services
-            Google que vous avez autorisés.
-        </p>
-
-        <div class="permissions">
-
-            <div>
-                ✓ Gmail
-            </div>
-
-            <div>
-                ✓ Google Calendar
-            </div>
-
-            <div>
-                ✓ Google Drive
-            </div>
-
-        </div>
-
-        <button
-            class="google-button"
-            onclick="continueGoogleAuth()"
-        >
-
-            <span>
-                G
-            </span>
-
-            Continuer avec Google
-
-        </button>
-
-        <small>
-            Vous serez redirigé vers Google pour
-            vous authentifier et donner votre consentement.
-        </small>
-
-    </div>
-
-</div>
-
-
-<script src="/static/app.js"></script>
+<script
+    src="{{ url_for('static', filename='app.js') }}"
+></script>
 
 </body>
-
 </html>
