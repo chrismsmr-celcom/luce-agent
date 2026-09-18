@@ -23,3 +23,8 @@ guard = AgentGuard(
     block_on_high=True,
     debug=True,
 )
+
+print("[Cerbere] Initialized")
+print(f"[Cerbere] Collector URL: {collector_url}")
+print(f"[Cerbere] API key configured: {bool(api_key)}")
+print("[Cerbere] Debug mode: True")
