@@ -1,4 +1,4 @@
-cerbere-ag>=0.3.0
+cerbere-ag>=0.4.0
 openai>=1.0.0
 python-dotenv>=1.0.0
 google-api-python-client>=2.100.0
@@ -7,3 +7,4 @@ google-auth-oauthlib>=1.1.0
 Flask
 google-auth
 composio==0.17.1
+
