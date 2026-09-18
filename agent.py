@@ -274,67 +274,83 @@ def get_composio_tools(user_id: str) -> list[dict]:
 # CERBERE SECURITY BOUNDARY
 # ============================================================
 
+import os
+from agentguard import AgentGuard, ApprovalRequiredException
+
+# ==============================================================================
+# INITIALISATION DE L'INSTANCE GUARD (C'est ici qu'on crée 'guard')
+# ==============================================================================
+guard = AgentGuard(
+    collector_url=os.getenv("AGENTGUARD_COLLECTOR_URL", "https://app.cerbereag.site"),
+    api_key=os.getenv("AGENTGUARD_API_KEY"),
+    max_budget=10.0,
+    block_on_high=True
+)
+
 def execute_with_cerbere(
     user_id: str,
     tool_name: str,
     arguments: dict,
 ):
-    print(
-        f"[Luce] Tool call requested: "
-        f"{tool_name} {arguments}"
-    )
+    print(f"[Luce] Tool call requested: {tool_name} {arguments}")
 
-    def composio_execution(**params):
-        print(
-            f"[Composio] Executing tool: "
-            f"{tool_name}"
-        )
-
-        return execute_tool(
-            user_id=user_id,
-            tool_slug=tool_name,
-            arguments=params,
-        )
+    def protected_execution(**kwargs):
+        print(f"[Composio] Executing approved tool: {tool_name}")
+        return execute_tool(user_id=user_id, tool_slug=tool_name, arguments=kwargs)
 
     try:
-        print(
-            f"[Cerbere] Checking tool: "
-            f"{tool_name}"
-        )
-
-        guarded_execution = guard.guard_tool_call(
+        print(f"[Cerbere] Checking tool: {tool_name}")
+        
+        result = guard.guard_tool_call(
             tool_name=tool_name,
             params=arguments,
-            func=composio_execution,
+            func=protected_execution,
         )
 
-        print(
-            f"[Cerbere] Tool result received: "
-            f"{tool_name}"
-        )
-
+        print(f"[Cerbere] ALLOW: {tool_name}")
         return {
             "success": True,
             "blocked": False,
             "tool": tool_name,
-            "result": guarded_execution,
+            "result": result,
+        }
+
+    except ApprovalRequiredException as e:
+        print(f"[Cerbere] PENDING APPROVAL: {tool_name} -> {str(e)}")
+        return {
+            "success": False,
+            "blocked": False,          # Pas bloqué, juste en attente
+            "pending_approval": True,  # Flag pour l'UI
+            "tool": tool_name,
+            "approval_id": e.approval_id,
+            "error": str(e),
+            "details": e.details,
         }
 
     except Exception as exc:
         error_message = str(exc)
+        print(f"[Cerbere] Tool rejected or failed: {tool_name}: {error_message}")
 
-        print(
-            f"[Cerbere] Tool rejected or failed: "
-            f"{tool_name}: {error_message}"
-        )
+        if (
+            "AgentGuard" in error_message
+            or "blocked" in error_message.lower()
+            or "deny" in error_message.lower()
+            or "risk" in error_message.lower()
+        ):
+            return {
+                "success": False,
+                "blocked": True,
+                "tool": tool_name,
+                "error": error_message,
+            }
 
         return {
             "success": False,
             "blocked": True,
             "tool": tool_name,
-            "error": error_message,
+            "error": "Cerbere security check failed. Tool execution was prevented.",
+            "details": error_message,
         }
-
     # --------------------------------------------------------
     # IMPORTANT:
     # AgentGuard.guard_tool_call() expects a callable.
@@ -833,3 +849,4 @@ def process_message(
         "message": fallback,
         "tool_called": True,
     }
+
