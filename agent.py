@@ -279,22 +279,61 @@ def execute_with_cerbere(
     tool_name: str,
     arguments: dict,
 ):
-    """
-    Real Cerbere execution boundary.
-
-    DeepSeek
-        ↓
-    Cerbere.guard_tool_call()
-        ↓
-    ALLOW / BLOCK
-        ↓
-    Composio
-    """
-
     print(
-        f"[Cerbere] Checking tool call: "
+        f"[Luce] Tool call requested: "
         f"{tool_name} {arguments}"
     )
+
+    def composio_execution(**params):
+        print(
+            f"[Composio] Executing tool: "
+            f"{tool_name}"
+        )
+
+        return execute_tool(
+            user_id=user_id,
+            tool_slug=tool_name,
+            arguments=params,
+        )
+
+    try:
+        print(
+            f"[Cerbere] Checking tool: "
+            f"{tool_name}"
+        )
+
+        guarded_execution = guard.guard_tool_call(
+            tool_name=tool_name,
+            params=arguments,
+            func=composio_execution,
+        )
+
+        print(
+            f"[Cerbere] Tool result received: "
+            f"{tool_name}"
+        )
+
+        return {
+            "success": True,
+            "blocked": False,
+            "tool": tool_name,
+            "result": guarded_execution,
+        }
+
+    except Exception as exc:
+        error_message = str(exc)
+
+        print(
+            f"[Cerbere] Tool rejected or failed: "
+            f"{tool_name}: {error_message}"
+        )
+
+        return {
+            "success": False,
+            "blocked": True,
+            "tool": tool_name,
+            "error": error_message,
+        }
 
     # --------------------------------------------------------
     # IMPORTANT:
