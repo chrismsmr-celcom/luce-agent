@@ -22,19 +22,20 @@ composio = Composio(
     api_key=COMPOSIO_API_KEY
 )
 
-# GitHub est maintenant inclus dans les toolkits
+# GitHub et X (Twitter) sont maintenant inclus dans les toolkits
 TOOLKITS = [
     "gmail",
     "googlecalendar",
     "googledrive",
     "github",
+    "twitter",
 ]
 
 # Bump this number whenever TOOLKITS changes.
 # Sessions saved with an older version are NOT restored:
 # a new session (with the new toolkits) is created instead.
-# This fixes: "Toolkit 'github' is not allowed for this session"
-SESSION_VERSION = 2
+# This fixes: "Toolkit 'github'/'twitter' is not allowed for this session"
+SESSION_VERSION = 3
 
 
 def _toolkit_not_allowed(exc: Exception) -> bool:
