@@ -379,6 +379,7 @@ button {
 .connection-icon.drive { background: rgba(15, 157, 88, 0.15); }
 .connection-icon.github { background: rgba(110, 84, 168, 0.18); }
 .connection-icon.twitter { background: rgba(255, 255, 255, 0.10); }
+.connection-icon.whatsapp { background: rgba(37, 211, 102, 0.15); }
 
 .connection-info {
     flex: 1;
