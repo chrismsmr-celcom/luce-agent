@@ -47,6 +47,64 @@ def _toolkit_not_allowed(exc: Exception) -> bool:
     )
 
 
+def _create_session(user_id: str, toolkits: list):
+    """
+    Create a Composio session. Some toolkits (e.g. "twitter")
+    require a pre-existing auth config (error 4300:
+    "require auth configs but none exist and cannot be
+    auto-created"). When that happens, retry without the
+    problematic toolkits instead of crashing.
+    """
+
+    try:
+        return composio.create(
+            user_id=user_id,
+            toolkits=toolkits,
+            sandbox={"enable": False},
+        )
+    except Exception as exc:
+
+        text = str(exc)
+
+        if "auth configs" in text and "cannot be auto-created" in text:
+
+            import re
+            rejected = re.findall(
+                r"cannot be auto-created: ([a-zA-Z0-9_,\s]+?)\.",
+                text,
+            )
+
+            rejected_names = set()
+            for chunk in rejected:
+                rejected_names.update(
+                    name.strip()
+                    for name in chunk.split(",")
+                    if name.strip()
+                )
+
+            if rejected_names:
+                remaining = [
+                    name for name in toolkits
+                    if name not in rejected_names
+                ]
+
+                print(
+                    f"[Composio] Toolkits requiring an auth config, "
+                    f"excluded from session: {sorted(rejected_names)}"
+                )
+
+                if not remaining:
+                    raise
+
+                return composio.create(
+                    user_id=user_id,
+                    toolkits=remaining,
+                    sandbox={"enable": False},
+                )
+
+        raise
+
+
 def get_or_create_session(user_id: str):
     """
     Get the existing Composio session for the user.
@@ -86,11 +144,7 @@ def get_or_create_session(user_id: str):
 
     # 2. Create a new session
 
-    session = composio.create(
-        user_id=user_id,
-        toolkits=TOOLKITS,
-        sandbox={"enable": False},
-    )
+    session = _create_session(user_id, TOOLKITS)
 
     # 3. Persist the session ID (versioned)
 
@@ -164,6 +218,15 @@ def execute_tool(
         session = get_or_create_session(user_id)
 
         return session.execute(tool_slug, arguments=arguments)
+
+
+def _toolkit_needs_auth_config(exc: Exception) -> bool:
+    """Detect Composio error 4300 (toolkit requires auth config)."""
+    text = str(exc)
+    return (
+        "auth configs" in text
+        and "cannot be auto-created" in text
+    )
 
 
 def list_connected_accounts(user_id: str):
