@@ -88,6 +88,7 @@ def connect_toolkit(toolkit):
         "googledrive",
         "github",
         "twitter",
+        "whatsapp",
     }
 
     if toolkit not in allowed_toolkits:
@@ -139,6 +140,7 @@ def connections():
             "googledrive": False,
             "github": False,
             "twitter": False,
+            "whatsapp": False,
         }
 
         for account in accounts:
