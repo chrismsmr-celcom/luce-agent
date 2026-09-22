@@ -26,16 +26,8 @@ from database import (
 )
 
 
-# ---------------------------------------------------------
-# ENVIRONMENT
-# ---------------------------------------------------------
-
 load_dotenv()
 
-
-# ---------------------------------------------------------
-# FLASK
-# ---------------------------------------------------------
 
 app = Flask(
     __name__,
@@ -44,28 +36,15 @@ app = Flask(
 )
 
 
-app.secret_key = os.getenv(
-    "FLASK_SECRET_KEY"
-)
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
 
 if not app.secret_key:
+    raise RuntimeError("FLASK_SECRET_KEY is missing")
 
-    raise RuntimeError(
-        "FLASK_SECRET_KEY is missing"
-    )
-
-
-# ---------------------------------------------------------
-# DATABASE
-# ---------------------------------------------------------
 
 init_db()
 
-
-# ---------------------------------------------------------
-# USER
-# ---------------------------------------------------------
 
 def get_user_id():
     """
@@ -79,80 +58,41 @@ def get_user_id():
 
     if "user_id" not in session:
 
-        user_id = (
-            "luce_"
-            + uuid.uuid4().hex
-        )
+        user_id = "luce_" + uuid.uuid4().hex
 
         session.permanent = True
-
         session["user_id"] = user_id
-
-        create_user(
-            user_id
-        )
+        create_user(user_id)
 
     return session["user_id"]
 
 
-# ---------------------------------------------------------
-# FRONTEND
-# ---------------------------------------------------------
-
 @app.get("/")
 def index():
-
     get_user_id()
+    return render_template("index.html")
 
-    return render_template(
-        "index.html"
-    )
-
-
-# ---------------------------------------------------------
-# HEALTH
-# ---------------------------------------------------------
 
 @app.get("/health")
 def health():
-
-    return jsonify(
-        {
-            "status": "ok",
-            "service": "luce",
-        }
-    )
+    return jsonify({"status": "ok", "service": "luce"})
 
 
-# ---------------------------------------------------------
-# CONNECTION
-# ---------------------------------------------------------
+@app.post("/api/connect/<toolkit>")
+def connect_toolkit(toolkit):
 
-@app.post(
-    "/api/connect/<toolkit>"
-)
-def connect_toolkit(
-    toolkit,
-):
-
+    # GitHub ajouté ici
     allowed_toolkits = {
         "gmail",
         "googlecalendar",
         "googledrive",
+        "github",
     }
 
     if toolkit not in allowed_toolkits:
-
-        return jsonify(
-            {
-                "error":
-                    "Unsupported toolkit"
-            }
-        ), 400
-
+        return jsonify({"error": "Unsupported toolkit"}), 400
 
     user_id = get_user_id()
-
 
     try:
 
@@ -161,182 +101,85 @@ def connect_toolkit(
             + "/api/composio/callback"
         )
 
-
         connection = authorize_toolkit(
             user_id=user_id,
             toolkit=toolkit,
             callback_url=callback_url,
         )
 
-
-        return jsonify(
-            connection
-        )
-
+        return jsonify(connection)
 
     except Exception as exc:
 
-        app.logger.exception(
-            "Composio authorization failed"
-        )
-
-        return jsonify(
-            {
-                "error": str(exc)
-            }
-        ), 500
+        app.logger.exception("Composio authorization failed")
+        return jsonify({"error": str(exc)}), 500
 
 
-# ---------------------------------------------------------
-# COMPOSIO CALLBACK
-# ---------------------------------------------------------
-
-@app.get(
-    "/api/composio/callback"
-)
+@app.get("/api/composio/callback")
 def composio_callback():
-
     # Composio completes the connection flow.
-    #
     # We simply return the user to Luce.
-
     return redirect("/")
 
 
-# ---------------------------------------------------------
-# CONNECTION STATUS
-# ---------------------------------------------------------
-
-@app.get(
-    "/api/connections"
-)
+@app.get("/api/connections")
 def connections():
 
     user_id = get_user_id()
 
-
     try:
 
-        accounts = (
-            list_connected_accounts(
-                user_id
-            )
-        )
+        accounts = list_connected_accounts(user_id)
 
-
+        # GitHub ajouté ici
         result = {
             "gmail": False,
             "googlecalendar": False,
             "googledrive": False,
+            "github": False,
         }
-
 
         for account in accounts:
 
             toolkit = getattr(
-                getattr(
-                    account,
-                    "toolkit",
-                    None,
-                ),
+                getattr(account, "toolkit", None),
                 "slug",
                 "",
             )
 
-
-            toolkit = (
-                str(toolkit)
-                .lower()
-            )
-
+            toolkit = str(toolkit).lower()
 
             if toolkit in result:
+                result[toolkit] = True
 
-                result[
-                    toolkit
-                ] = True
-
-
-        return jsonify(
-            result
-        )
-
+        return jsonify(result)
 
     except Exception as exc:
 
-        app.logger.exception(
-            "Could not retrieve connections"
-        )
-
-        return jsonify(
-            {
-                "error": str(exc)
-            }
-        ), 500
+        app.logger.exception("Could not retrieve connections")
+        return jsonify({"error": str(exc)}), 500
 
 
-# ---------------------------------------------------------
-# CHAT HISTORY
-# ---------------------------------------------------------
-
-@app.get(
-    "/api/history"
-)
+@app.get("/api/history")
 def history():
 
     user_id = get_user_id()
+    messages = get_messages(user_id)
+
+    return jsonify({"messages": messages})
 
 
-    messages = get_messages(
-        user_id
-    )
-
-
-    return jsonify(
-        {
-            "messages": messages
-        }
-    )
-
-
-# ---------------------------------------------------------
-# CHAT
-# ---------------------------------------------------------
-
-@app.post(
-    "/api/chat"
-)
+@app.post("/api/chat")
 def chat():
 
     user_id = get_user_id()
 
+    data = request.get_json(silent=True) or {}
 
-    data = (
-        request
-        .get_json(
-            silent=True
-        )
-        or {}
-    )
-
-
-    message = str(
-        data.get(
-            "message",
-            "",
-        )
-    ).strip()
-
+    message = str(data.get("message", "")).strip()
 
     if not message:
-
-        return jsonify(
-            {
-                "error":
-                    "Message is required"
-            }
-        ), 400
-
+        return jsonify({"error": "Message is required"}), 400
 
     try:
 
@@ -345,57 +188,23 @@ def chat():
             message=message,
         )
 
-
-        return jsonify(
-            result
-        )
-
+        return jsonify(result)
 
     except Exception as exc:
 
-        app.logger.exception(
-            "Luce processing failed"
-        )
+        app.logger.exception("Luce processing failed")
+        return jsonify({"error": str(exc)}), 500
 
 
-        return jsonify(
-            {
-                "error": str(exc)
-            }
-        ), 500
-
-
-# ---------------------------------------------------------
-# LOGOUT / RESET LOCAL SESSION
-# ---------------------------------------------------------
-
-@app.post(
-    "/api/logout"
-)
+@app.post("/api/logout")
 def logout():
-
     session.clear()
+    return jsonify({"success": True})
 
-    return jsonify(
-        {
-            "success": True
-        }
-    )
-
-
-# ---------------------------------------------------------
-# START
-# ---------------------------------------------------------
 
 if __name__ == "__main__":
 
-    port = int(
-        os.getenv(
-            "PORT",
-            "10000",
-        )
-    )
-
+    port = int(os.getenv("PORT", "10000"))
 
     app.run(
         host="0.0.0.0",
