@@ -29,13 +29,14 @@ TOOLKITS = [
     "googledrive",
     "github",
     "twitter",
+    "whatsapp",
 ]
 
 # Bump this number whenever TOOLKITS changes.
 # Sessions saved with an older version are NOT restored:
 # a new session (with the new toolkits) is created instead.
 # This fixes: "Toolkit 'github'/'twitter' is not allowed for this session"
-SESSION_VERSION = 3
+SESSION_VERSION = 4
 
 
 def _toolkit_not_allowed(exc: Exception) -> bool:
