@@ -81,7 +81,7 @@ def health():
 @app.post("/api/connect/<toolkit>")
 def connect_toolkit(toolkit):
 
-    # GitHub et X (Twitter) ajoutés ici
+    # Tous les toolkits autorisés pour la connexion
     allowed_toolkits = {
         "gmail",
         "googlecalendar",
@@ -89,6 +89,11 @@ def connect_toolkit(toolkit):
         "github",
         "twitter",
         "whatsapp",
+        "supabase",
+        "googlesheets",
+        "googlephotos",
+        "gsearchconsole",
+        "googlemaps",
     }
 
     if toolkit not in allowed_toolkits:
@@ -133,7 +138,7 @@ def connections():
 
         accounts = list_connected_accounts(user_id)
 
-        # GitHub et X (Twitter) ajoutés ici
+        # Tous les toolkits suivis dans le statut
         result = {
             "gmail": False,
             "googlecalendar": False,
@@ -141,6 +146,11 @@ def connections():
             "github": False,
             "twitter": False,
             "whatsapp": False,
+            "supabase": False,
+            "googlesheets": False,
+            "googlephotos": False,
+            "gsearchconsole": False,
+            "googlemaps": False,
         }
 
         for account in accounts:
