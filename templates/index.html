@@ -45,25 +45,26 @@
         <section id="chat-view" class="view active">
 
             <header class="header">
-                <div class="header-avatar">L</div>
                 <div>
-                    <h1>Luce</h1>
-                    <p>Your AI Chief of Staff <span class="dot"></span><span class="online">online</span></p>
+                    <h1>Good morning 👋</h1>
+                    <p class="subtitle">Your AI Chief of Staff — <span class="online">online</span></p>
                 </div>
+                <div class="header-pill">Luce</div>
             </header>
 
             <div id="messages" class="messages">
                 <div class="message assistant">
                     <div class="bubble">
-                        Hello, I'm <strong>Luce</strong> 👋<br><br>
-                        I can work with your connected business tools — Gmail, Calendar, Drive, GitHub and more.
+                        Hello, I'm <strong>Luce</strong>.<br><br>
+                        I can work with your connected business tools — Gmail, Calendar, Drive, GitHub, X, WhatsApp, Sheets, Supabase and more.
                     </div>
                 </div>
             </div>
 
             <form id="chat-form" class="chat-form">
+                <span class="chat-icon">🔍</span>
                 <input id="message-input" type="text" placeholder="Ask Luce something..." autocomplete="off">
-                <button type="submit" id="send-button">Send ➤</button>
+                <button type="submit" id="send-button">Send ↗</button>
             </form>
 
         </section>
@@ -74,7 +75,7 @@
             <header class="header">
                 <div>
                     <h1>Connections</h1>
-                    <p>Connect Luce to your tools.</p>
+                    <p class="subtitle">Connect Luce to your tools.</p>
                 </div>
             </header>
 
@@ -110,7 +111,6 @@
                     <button class="connect-button">Connect</button>
                 </div>
 
-                <!-- NOUVEAU : GitHub -->
                 <div class="connection-card" data-toolkit="github">
                     <div class="connection-icon github">🐙</div>
                     <div class="connection-info">
@@ -121,7 +121,6 @@
                     <button class="connect-button">Connect</button>
                 </div>
 
-                <!-- NOUVEAU : X (Twitter) -->
                 <div class="connection-card" data-toolkit="twitter">
                     <div class="connection-icon twitter">𝕏</div>
                     <div class="connection-info">
@@ -132,12 +131,66 @@
                     <button class="connect-button">Connect</button>
                 </div>
 
-                <!-- NOUVEAU : WhatsApp -->
                 <div class="connection-card" data-toolkit="whatsapp">
                     <div class="connection-icon whatsapp">💬</div>
                     <div class="connection-info">
                         <h3>WhatsApp</h3>
                         <p>Send messages and stay reachable.</p>
+                        <span class="status">Not connected</span>
+                    </div>
+                    <button class="connect-button">Connect</button>
+                </div>
+
+                <!-- NOUVEAU : Supabase -->
+                <div class="connection-card" data-toolkit="supabase">
+                    <div class="connection-icon supabase">⚡</div>
+                    <div class="connection-info">
+                        <h3>Supabase</h3>
+                        <p>Query and manage your databases.</p>
+                        <span class="status">Not connected</span>
+                    </div>
+                    <button class="connect-button">Connect</button>
+                </div>
+
+                <!-- NOUVEAU : Google Sheets -->
+                <div class="connection-card" data-toolkit="googlesheets">
+                    <div class="connection-icon sheets">📊</div>
+                    <div class="connection-info">
+                        <h3>Google Sheets</h3>
+                        <p>Read and update your spreadsheets.</p>
+                        <span class="status">Not connected</span>
+                    </div>
+                    <button class="connect-button">Connect</button>
+                </div>
+
+                <!-- NOUVEAU : Google Photos -->
+                <div class="connection-card" data-toolkit="googlephotos">
+                    <div class="connection-icon photos">🖼️</div>
+                    <div class="connection-info">
+                        <h3>Google Photos</h3>
+                        <p>Browse and organize your photo library.</p>
+                        <span class="status">Not connected</span>
+                    </div>
+                    <button class="connect-button">Connect</button>
+                </div>
+
+                <!-- NOUVEAU : Google Search Console -->
+                <div class="connection-card" data-toolkit="gsearchconsole">
+                    <div class="connection-icon gsc">📈</div>
+                    <div class="connection-info">
+                        <h3>Search Console</h3>
+                        <p>SEO performance and search analytics.</p>
+                        <span class="status">Not connected</span>
+                    </div>
+                    <button class="connect-button">Connect</button>
+                </div>
+
+                <!-- NOUVEAU : Google Maps -->
+                <div class="connection-card" data-toolkit="googlemaps">
+                    <div class="connection-icon maps">📍</div>
+                    <div class="connection-info">
+                        <h3>Google Maps</h3>
+                        <p>Places, routes and location data.</p>
                         <span class="status">Not connected</span>
                     </div>
                     <button class="connect-button">Connect</button>
