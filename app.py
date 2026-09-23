@@ -92,8 +92,7 @@ def connect_toolkit(toolkit):
         "supabase",
         "googlesheets",
         "googlephotos",
-        "gsearchconsole",
-        "googlemaps",
+        "googlesearchconsole",
     }
 
     if toolkit not in allowed_toolkits:
@@ -149,8 +148,7 @@ def connections():
             "supabase": False,
             "googlesheets": False,
             "googlephotos": False,
-            "gsearchconsole": False,
-            "googlemaps": False,
+            "googlesearchconsole": False,
         }
 
         for account in accounts:
