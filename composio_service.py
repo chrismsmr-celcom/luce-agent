@@ -23,6 +23,8 @@ composio = Composio(
 )
 
 # Tous les toolkits disponibles pour Luce
+# ⚠️ Slugs exacts Composio : "googlesearchconsole" (pas gsearchconsole).
+# "googlemaps" n'est pas un slug valide Composio — retiré.
 TOOLKITS = [
     "gmail",
     "googlecalendar",
@@ -33,15 +35,14 @@ TOOLKITS = [
     "supabase",
     "googlesheets",
     "googlephotos",
-    "gsearchconsole",
-    "googlemaps",
+    "googlesearchconsole",
 ]
 
 # Bump this number whenever TOOLKITS changes.
 # Sessions saved with an older version are NOT restored:
 # a new session (with the new toolkits) is created instead.
 # This fixes: "Toolkit 'X' is not allowed for this session"
-SESSION_VERSION = 5
+SESSION_VERSION = 6
 
 
 def _toolkit_not_allowed(exc: Exception) -> bool:
@@ -51,6 +52,26 @@ def _toolkit_not_allowed(exc: Exception) -> bool:
         "ToolkitNotAllowed" in text
         or "is not allowed for this session" in text
     )
+
+
+def _invalid_toolkit_slugs(exc: Exception) -> set:
+    """
+    Detect Composio error 4305 (InvalidToolkitSlugs) and
+    extract the offending slugs, e.g.:
+    "Invalid toolkit slugs: googlemaps, gsearchconsole."
+    """
+    text = str(exc)
+    if "Invalid toolkit slugs" not in text:
+        return set()
+    import re
+    m = re.search(r"Invalid toolkit slugs:\s*([a-zA-Z0-9_,\s]+?)\.", text)
+    if not m:
+        return set()
+    return {
+        name.strip()
+        for name in m.group(1).split(",")
+        if name.strip()
+    }
 
 
 def _create_session(user_id: str, toolkits: list):
@@ -69,6 +90,21 @@ def _create_session(user_id: str, toolkits: list):
             sandbox={"enable": False},
         )
     except Exception as exc:
+
+        # Case 1: invalid toolkit slugs (error 4305) — drop them and retry
+        invalid = _invalid_toolkit_slugs(exc)
+        if invalid:
+            remaining = [t for t in toolkits if t not in invalid]
+            print(
+                f"[Composio] Invalid toolkit slugs, excluded: {sorted(invalid)}"
+            )
+            if not remaining:
+                raise
+            return composio.create(
+                user_id=user_id,
+                toolkits=remaining,
+                sandbox={"enable": False},
+            )
 
         text = str(exc)
 
