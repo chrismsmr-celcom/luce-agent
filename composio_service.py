@@ -22,7 +22,7 @@ composio = Composio(
     api_key=COMPOSIO_API_KEY
 )
 
-# GitHub et X (Twitter) sont maintenant inclus dans les toolkits
+# Tous les toolkits disponibles pour Luce
 TOOLKITS = [
     "gmail",
     "googlecalendar",
@@ -30,13 +30,18 @@ TOOLKITS = [
     "github",
     "twitter",
     "whatsapp",
+    "supabase",
+    "googlesheets",
+    "googlephotos",
+    "gsearchconsole",
+    "googlemaps",
 ]
 
 # Bump this number whenever TOOLKITS changes.
 # Sessions saved with an older version are NOT restored:
 # a new session (with the new toolkits) is created instead.
-# This fixes: "Toolkit 'github'/'twitter' is not allowed for this session"
-SESSION_VERSION = 4
+# This fixes: "Toolkit 'X' is not allowed for this session"
+SESSION_VERSION = 5
 
 
 def _toolkit_not_allowed(exc: Exception) -> bool:
