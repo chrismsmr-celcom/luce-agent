@@ -25,22 +25,19 @@ load_dotenv()
 # CONFIGURATION
 # ============================================================
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-if not DEEPSEEK_API_KEY:
-    raise RuntimeError("DEEPSEEK_API_KEY is missing")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("OPENROUTER_API_KEY is missing")
 
 
 client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url="https://api.deepseek.com",
+    api_key=OPENROUTER_API_KEY,
+    base_url="https://openrouter.ai/api/v1",
 )
 
 
-MODEL = "deepseek-chat"
-
-
-MAX_TOOL_ROUNDS = 8
+MODEL = "openrouter/free"
 
 
 # ============================================================
