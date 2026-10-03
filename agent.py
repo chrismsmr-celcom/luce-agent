@@ -27,8 +27,12 @@ load_dotenv()
 # CONFIGURATION
 # ============================================================
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+
+if not DEEPSEEK_API_KEY:
+    raise RuntimeError("DEEPSEEK_API_KEY is missing")
 
 if not OPENROUTER_API_KEY:
     raise RuntimeError("OPENROUTER_API_KEY is missing")
@@ -38,7 +42,17 @@ if not CEREBRAS_API_KEY:
 
 
 # ------------------------------------------------------------
-# OpenRouter
+# DeepSeek — PRIMARY
+# ------------------------------------------------------------
+
+deepseek_client = OpenAI(
+    api_key=DEEPSEEK_API_KEY,
+    base_url="https://api.deepseek.com",
+)
+
+
+# ------------------------------------------------------------
+# OpenRouter — FALLBACK 1
 # ------------------------------------------------------------
 
 openrouter_client = OpenAI(
@@ -48,7 +62,7 @@ openrouter_client = OpenAI(
 
 
 # ------------------------------------------------------------
-# Cerebras
+# Cerebras — FALLBACK 2
 # ------------------------------------------------------------
 
 cerebras_client = OpenAI(
@@ -60,6 +74,11 @@ cerebras_client = OpenAI(
 # ------------------------------------------------------------
 # Models
 # ------------------------------------------------------------
+
+DEEPSEEK_MODEL = os.getenv(
+    "DEEPSEEK_MODEL",
+    "deepseek-chat",
+)
 
 OPENROUTER_MODEL = os.getenv(
     "OPENROUTER_MODEL",
@@ -80,9 +99,9 @@ MAX_TOOL_ROUNDS = 8
 
 
 print("[Luce] LLM configuration loaded")
-print(f"[Luce] Primary provider: OpenRouter / {OPENROUTER_MODEL}")
-print(f"[Luce] Fallback provider: Cerebras / {CEREBRAS_MODEL}")
-
+print(f"[Luce] Primary provider: DeepSeek / {DEEPSEEK_MODEL}")
+print(f"[Luce] Fallback provider: OpenRouter / {OPENROUTER_MODEL}")
+print(f"[Luce] Final fallback: Cerebras / {CEREBRAS_MODEL}")
 
 # ============================================================
 # SYSTEM PROMPT
@@ -323,6 +342,10 @@ def call_llm(
     """
     LLM cascade:
 
+        DeepSeek
+             ↓
+        if failure
+             ↓
         OpenRouter
              ↓
         if failure
@@ -334,26 +357,66 @@ def call_llm(
         raise error
 
     Cerbere is NOT involved here.
+
     Cerbere remains exclusively at the external-tool
     execution boundary.
     """
 
+    request_kwargs = {
+        "messages": messages,
+        "tools": tools if tools else None,
+        "tool_choice": "auto" if tools else "none",
+        "temperature": 0.2,
+    }
+
     # --------------------------------------------------------
-    # PRIMARY: OPENROUTER
+    # PRIMARY: DEEPSEEK
     # --------------------------------------------------------
 
     try:
 
         print(
-            "[Luce] Trying OpenRouter..."
+            f"[Luce] Trying DeepSeek / {DEEPSEEK_MODEL}..."
+        )
+
+        response = deepseek_client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
+            **request_kwargs,
+        )
+
+        print(
+            "[Luce] DeepSeek response received"
+        )
+
+        return response
+
+    except Exception as deepseek_error:
+
+        print(
+            "[Luce] DeepSeek failed:"
+        )
+
+        print(
+            f"[Luce] {deepseek_error}"
+        )
+
+        print(
+            "[Luce] Falling back to OpenRouter..."
+        )
+
+    # --------------------------------------------------------
+    # FALLBACK 1: OPENROUTER
+    # --------------------------------------------------------
+
+    try:
+
+        print(
+            f"[Luce] Trying OpenRouter / {OPENROUTER_MODEL}..."
         )
 
         response = openrouter_client.chat.completions.create(
             model=OPENROUTER_MODEL,
-            messages=messages,
-            tools=tools if tools else None,
-            tool_choice="auto" if tools else "none",
-            temperature=0.2,
+            **request_kwargs,
         )
 
         print(
@@ -377,17 +440,18 @@ def call_llm(
         )
 
     # --------------------------------------------------------
-    # FALLBACK: CEREBRAS
+    # FALLBACK 2: CEREBRAS
     # --------------------------------------------------------
 
     try:
 
+        print(
+            f"[Luce] Trying Cerebras / {CEREBRAS_MODEL}..."
+        )
+
         response = cerebras_client.chat.completions.create(
             model=CEREBRAS_MODEL,
-            messages=messages,
-            tools=tools if tools else None,
-            tool_choice="auto" if tools else "none",
-            temperature=0.2,
+            **request_kwargs,
         )
 
         print(
@@ -407,7 +471,8 @@ def call_llm(
         )
 
         raise RuntimeError(
-            "Both LLM providers failed. "
+            "All LLM providers failed. "
+            f"DeepSeek error: {deepseek_error}. "
             f"OpenRouter error: {openrouter_error}. "
             f"Cerebras error: {cerebras_error}."
         ) from cerebras_error
